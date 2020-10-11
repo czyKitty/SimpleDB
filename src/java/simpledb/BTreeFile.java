@@ -196,7 +196,30 @@ public class BTreeFile implements DbFile {
 			Field f) 
 					throws DbException, TransactionAbortedException {
 		// some code goes here
-        return null;
+		// Base case, pgcateg() equal to BTreePageId.LEAF
+		if(pid.pgcateg() == BTreePageId.LEAF){
+			return (BTreeLeafPage)(this.getPage(tid,dirtypages,pid,perm));
+		}else if(pid.pgcateg() == BTreePageId.INTERNAL){
+			// If page is internal, use BTreeInternalPage.iterator() to access entries
+			BTreeInternalPage curPage = (BTreeInternalPage)(this.getPage(tid,dirtypages,pid,Permissions.READ_ONLY));
+			Iterator<BTreeEntry> it = curPage.iterator();
+			// If iterator is null or reach end, throw exception 
+			if (it == null || !it.hasNext()) throw new DbException("Illegal entry iterator.");
+			BTreeEntry curEntry = it.next();
+			// When key value f is null, recurse on the left-most child every time
+			if(f == null){
+				return findLeafPage(tid,dirtypages,curEntry.getLeftChild(),perm,f);
+			}
+			// When iterator not reach end, recursively find leaf
+			while(true){
+				if (curEntry.getKey().compare(Op.GREATER_THAN_OR_EQ,f)){
+					return findLeafPage(tid,dirtypages,curEntry.getLeftChild(),perm,f);
+				}
+				if (it.hasNext()) curEntry=it.next();
+				else break;
+			}
+			return findLeafPage(tid,dirtypages,curEntry.getRightChild(),perm,f);
+		}else throw new DbException("Invalid page type");
 	}
 	
 	/**
@@ -242,14 +265,13 @@ public class BTreeFile implements DbFile {
 			throws DbException, IOException, TransactionAbortedException {
 		// some code goes here
         //
-        // Split the leaf page by adding a new page on the right of the existing
+		// Split the leaf page by adding a new page on the right of the existing
 		// page and moving half of the tuples to the new page.  Copy the middle key up
 		// into the parent page, and recursively split the parent as needed to accommodate
 		// the new entry.  getParentWithEmtpySlots() will be useful here.  Don't forget to update
 		// the sibling pointers of all the affected leaf pages.  Return the page into which a 
 		// tuple with the given key field should be inserted.
-        return null;
-		
+		return null;
 	}
 	
 	/**
