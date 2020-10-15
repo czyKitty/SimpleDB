@@ -747,9 +747,9 @@ public class BTreeFile implements DbFile {
         BTreeEntry newEntry  = new BTreeEntry(parentEntry.getKey(),page.reverseIterator().next().getRightChild(),null);
         // loop through tuples
         for (int i = 0; i < count; i++){
-            if (!rsIt.hasNext()) throw new DbException("no more entries to steal from left internal.");
+            if (!rsIt.hasNext()) throw new DbException("no more entries to steal from right internal.");
             BTreeEntry delEntry = rsIt.next();
-            newEntry.setLeftChild(delEntry.getLeftChild());
+            newEntry.setRightChild(delEntry.getLeftChild());
             page.insertEntry(newEntry);
             newEntry = new BTreeEntry(delEntry.getKey(),delEntry.getLeftChild(),null);
             rightSibling.deleteKeyAndLeftChild(delEntry);
