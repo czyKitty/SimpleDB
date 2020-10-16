@@ -271,7 +271,47 @@ public class BTreeFile implements DbFile {
 		// the new entry.  getParentWithEmtpySlots() will be useful here.  Don't forget to update
 		// the sibling pointers of all the affected leaf pages.  Return the page into which a 
 		// tuple with the given key field should be inserted.
-		return null;
+				// create the new page
+		BTreeLeafPage newpage = (BTreeLeafPage) getEmptyPage(tid, dirtypages, BTreePageId.LEAF);
+
+		// move the right half of the tuples in the old page to the new page
+		int i = 0;
+		Iterator<Tuple> it = page.reverseIterator();
+		Tuple tuple = null;
+		while(it.hasNext() && i < page.getMaxTuples()/2) {
+			tuple = it.next();
+			page.deleteTuple(tuple);
+			newpage.insertTuple(tuple);
+			i++;
+		}
+
+		// copy the key into the parent page
+		BTreeEntry entry = new BTreeEntry(tuple.getField(keyField), page.getId(), newpage.getId());
+		BTreeInternalPage parent = getParentWithEmptySlots(tid, dirtypages, page.getParentId(), entry.getKey());
+		parent.insertEntry(entry);
+		
+		// update the parent pointer
+		updateParentPointers(tid, dirtypages, parent);
+
+
+		// update sibling pointers
+		if(page.getRightSiblingId() != null) {
+			BTreeLeafPage rightsibling = (BTreeLeafPage) getPage(tid, dirtypages, 
+					page.getRightSiblingId(), Permissions.READ_WRITE);			
+			rightsibling.setLeftSiblingId(newpage.getId());
+			newpage.setRightSiblingId(rightsibling.getId());
+		}
+		newpage.setLeftSiblingId(page.getId());
+		page.setRightSiblingId(newpage.getId());
+		
+		
+		// return the page where the new tuple should be inserted
+		if(entry.getKey().compare(Op.GREATER_THAN, field)) {
+			return page;
+		}
+		else {
+			return newpage;
+		}
 	}
 	
 	/**
@@ -300,7 +340,38 @@ public class BTreeFile implements DbFile {
 			BTreeInternalPage page, Field field) 
 					throws DbException, IOException, TransactionAbortedException {
 		// some code goes here
-		return null;
+				// create the new page
+		BTreeInternalPage newpage = (BTreeInternalPage) getEmptyPage(tid, dirtypages, BTreePageId.INTERNAL);
+		
+		// move the right half of the entries in the old page to the new page
+		int i = 0;
+		Iterator<BTreeEntry> it = page.reverseIterator();
+		BTreeEntry entry = null;
+		while(it.hasNext() && i < page.getMaxEntries()/2) {
+			entry = it.next();
+			page.deleteKeyAndRightChild(entry);
+			newpage.insertEntry(entry);
+			i++;
+		}
+
+		// push middle key up into the parent page
+		entry = it.next();
+		page.deleteKeyAndRightChild(entry);
+		BTreeInternalPage parent = getParentWithEmptySlots(tid, dirtypages, page.getParentId(), entry.getKey());
+		parent.insertEntry(new BTreeEntry(entry.getKey(), page.getId(), newpage.getId()));
+		
+		// update the parent-children pointers of all page affected
+		updateParentPointers(tid, dirtypages, parent);
+		updateParentPointers(tid, dirtypages, newpage);
+		updateParentPointers(tid, dirtypages, page);
+				
+		// return the page where the new entry should be inserted
+		if(entry.getKey().compare(Op.GREATER_THAN, field)) {
+			return page;
+		}
+		else {
+			return newpage;
+		}
 	}
 	
 	/**
