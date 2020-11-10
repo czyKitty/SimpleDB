@@ -1,6 +1,8 @@
 package simpledb;
 import java.util.*;
 
+import simpledb.Aggregator.Op;
+
 /**
  * Knows how to compute some aggregate over a set of StringFields.
  */
@@ -12,8 +14,7 @@ public class StringAggregator implements Aggregator {
     private Type gbfieldtype;
     private Op what;
 
-    private ArrayList<Field> gbList;
-    private ArrayList<Integer> cList;
+    private HashMap<Field,Integer> countMap;
     /**
      * Aggregate constructor
      * @param gbfield the 0-based index of the group-by field in the tuple, or NO_GROUPING if there is no grouping
@@ -29,8 +30,7 @@ public class StringAggregator implements Aggregator {
         this.afield = afield;
         this.gbfieldtype = gbfieldtype;
         this.what = what;
-        this.gbList = new ArrayList<Field>();
-        this.cList = new ArrayList<Integer>();
+        countMap = new HashMap<Field, Integer>();
     }
 
     /**
@@ -39,28 +39,14 @@ public class StringAggregator implements Aggregator {
      */
     public void mergeTupleIntoGroup(Tuple tup) {
         // some code goes here
-    	int index;
-        if (this.gbfield == NO_GROUPING) index = 0;
-        else index = this.gbList.indexOf(tup.getField(this.gbfield));
-        if (index == -1) index = this.gbList.size();
-        
-        if (index == this.cList.size()) {
-            if (this.gbfield != NO_GROUPING) {
-            	this.gbList.add(tup.getField(this.gbfield));
-            }
-            this.cList.add(1);
-            return;
-        }
-        // Current count
-        int prevC = this.cList.get(index);
-        
-        switch (what) {
-            case COUNT:
-            	this.cList.set(index, prevC + 1);
-                break;
-            default:
-                break;
-        }
+    	Field t_gbfield;
+    	if (gbfield == Aggregator.NO_GROUPING) t_gbfield = null;
+    	else t_gbfield = tup.getField(gbfield);
+    	
+    	if (countMap.containsKey(t_gbfield) == false) countMap.put(t_gbfield, 0);
+
+    	int prevC = countMap.get(t_gbfield);
+    	countMap.put(t_gbfield, prevC+1);
     }
 
     /**
@@ -74,49 +60,31 @@ public class StringAggregator implements Aggregator {
     public DbIterator iterator() {
         // some code goes here
     	ArrayList<Tuple> tList = new ArrayList<Tuple>();
-    	
         TupleDesc td = null;
+        
         // if not grouping, single type tuple
-        if (this.gbfield == NO_GROUPING) {
+        if (gbfield == Aggregator.NO_GROUPING) {
             Type[] tps = new Type[1];
             tps[0] = Type.INT_TYPE;
             td = new TupleDesc(tps);
-            Tuple t = new Tuple(td);
-            
-            int val = 0;
-            
-            switch (this.what) {
-                case COUNT:
-                    val = this.cList.get(0);
-                    break;
-                default:
-                    break;
-            }
-            t.setField(0, new IntField(val));
-            tList.add(t);
-        } else {
-        	// tuple with type pair
-            Type[] tps = new Type[2];
+        }else {
+        	Type[] tps = new Type[2];
             tps[0] = gbfieldtype;
             tps[1] = Type.INT_TYPE;
             td = new TupleDesc(tps);
-            // Add tuple for each group
-            for (int i = 0; i < this.cList.size(); i ++) {
-                Tuple t = new Tuple(td);
-                int val = 0;
-                switch (what) {
-                    case COUNT:
-                        val = this.cList.get(i);
-                        break;
-                    default:
-                        break;
-                }
-                t.setField(0, this.gbList.get(i));
-                t.setField(1, new IntField(val));
-                tList.add(t);
-            }
         }
-        return new TupleIterator(td, tList);
+        
+        Tuple newT;
+        for (Field group : countMap.keySet()){
+    		int aggVal = countMap.get(group);
+    		newT = new Tuple(td);  
+    		if (gbfield == Aggregator.NO_GROUPING) newT.setField(0, new IntField(aggVal));
+    		else {
+    			newT.setField(0, group);
+        		newT.setField(1, new IntField(aggVal));    			
+    		}
+    		tList.add(newT);
+    	}
+    	return new TupleIterator(td, tList);
     }
-
 }
