@@ -88,7 +88,12 @@ public class HeapFile implements DbFile {
     // see DbFile.java for javadocs
     public void writePage(Page page) throws IOException {
         // some code goes here
-        // not necessary for lab1
+    	RandomAccessFile raf = new RandomAccessFile(this.hpfile, "rw");
+    	PageId pid = page.getId();
+    	int offset = BufferPool.getPageSize() * pid.pageNumber();
+    	raf.seek(offset);
+    	raf.write(page.getPageData(), 0, BufferPool.getPageSize());
+    	raf.close();
     }
 
     /**
@@ -103,8 +108,31 @@ public class HeapFile implements DbFile {
     public ArrayList<Page> insertTuple(TransactionId tid, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
         // some code goes here
-        return null;
-        // not necessary for lab1
+    	HeapPage hp = null;
+    	
+    	for (int i = 0; i < this.numPages(); i++) {
+    		PageId pid = new HeapPageId(this.getId(), i);
+    		hp = (HeapPage) Database.getBufferPool().getPage(tid, pid, Permissions.READ_WRITE);
+    		if (hp.getNumEmptySlots() > 0) break;
+        }
+    	
+        if (hp != null){
+        	hp.insertTuple(t);
+        	return new ArrayList<Page> (Arrays.asList(hp));
+        }
+         
+         // If no empty pages found create a new one
+         HeapPage newHp = new HeapPage(new HeapPageId(this.getId(), this.numPages()), HeapPage.createEmptyPageData());
+         newHp.insertTuple(t);
+         
+         RandomAccessFile raf = new RandomAccessFile(this.hpfile, "rw");
+         int offset = BufferPool.getPageSize() * this.numPages();
+         raf.seek(offset);
+         byte[] newHeapPageData =newHp.getPageData();
+         raf.write(newHeapPageData, 0, BufferPool.getPageSize());
+         raf.close();
+         
+         return new ArrayList<Page> (Arrays.asList(newHp));
     }
 
     // see DbFile.java for javadocs
