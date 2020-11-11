@@ -30,7 +30,7 @@ public class StringAggregator implements Aggregator {
         this.afield = afield;
         this.gbfieldtype = gbfieldtype;
         this.what = what;
-        countMap = new HashMap<Field, Integer>();
+        this.countMap = new HashMap<Field, Integer>();
     }
 
     /**
@@ -60,17 +60,14 @@ public class StringAggregator implements Aggregator {
     public DbIterator iterator() {
         // some code goes here
     	ArrayList<Tuple> tList = new ArrayList<Tuple>();
-        TupleDesc td = null;
+        TupleDesc td;
         
         // if not grouping, single type tuple
         if (gbfield == Aggregator.NO_GROUPING) {
-            Type[] tps = new Type[1];
-            tps[0] = Type.INT_TYPE;
+            Type[] tps = new Type[] {Type.INT_TYPE};
             td = new TupleDesc(tps);
         }else {
-        	Type[] tps = new Type[2];
-            tps[0] = gbfieldtype;
-            tps[1] = Type.INT_TYPE;
+        	Type[] tps = new Type[] {gbfieldtype, Type.INT_TYPE};
             td = new TupleDesc(tps);
         }
         

@@ -87,6 +87,7 @@ public class IntegerAggregator implements Aggregator {
                 break;
 	    	case SUM: 
 	    	case AVG: 
+	    		// Summing up all values and track how many values are in
 	    		countMap.put(t_gbfield, prevC+1);
 	    		newVal = val+prevV;
                 break;
@@ -109,36 +110,29 @@ public class IntegerAggregator implements Aggregator {
     public DbIterator iterator() {
         // some code goes here
     	ArrayList<Tuple> tList = new ArrayList<Tuple>();
-        TupleDesc td = null;
-        Tuple newT;
+        TupleDesc td;
         
         // When not grouped, return tuple of single (aggregateVal)
         // Else, return tuple of pair
         if (gbfield == Aggregator.NO_GROUPING) {
-            Type[] tps = new Type[1];
-            tps[0] = Type.INT_TYPE;
+            Type[] tps = new Type[] {Type.INT_TYPE};
             td = new TupleDesc(tps);
         }else {
-        	Type[] tps = new Type[2];
-            tps[0] = gbfieldtype;
-            tps[1] = Type.INT_TYPE;
+        	Type[] tps = new Type[] {gbfieldtype,Type.INT_TYPE};
             td = new TupleDesc(tps);
         }
         	
-        for (Field group : aggMap.keySet()){
+        Tuple newT;
+        for (Field group: aggMap.keySet()){
     		int aggVal;
-    		if (what == Op.AVG){
-    			aggVal = aggMap.get(group) / countMap.get(group);
-    		}
-    		else
-    		{
-    			aggVal = aggMap.get(group);
-    		}
+    		if (what == Op.AVG) aggVal = aggMap.get(group) / countMap.get(group);
+    		else aggVal = aggMap.get(group);
+    		
     		newT = new Tuple(td);
+    		
     		if (gbfield == Aggregator.NO_GROUPING){
     			newT.setField(0, new IntField(aggVal));
-    		}
-    		else {
+    		}else {
         		newT.setField(0, group);
         		newT.setField(1, new IntField(aggVal));    			
     		}
