@@ -7,14 +7,12 @@ import java.util.*;
 public class IntegerAggregator implements Aggregator {
 
     private static final long serialVersionUID = 1L;
-    
     private int gbfield, afield;
     private Type gbfieldtype;
     private Op what;
+    private TupleDesc td;
+    private HashMap<Field,ArrayList<Integer>> data; //[hold,count,sum]
 
-    private HashMap<Field,Integer> aggMap;
-    private HashMap<Field,Integer> countMap;
-    
     /**
      * Aggregate constructor
      * 
@@ -33,11 +31,12 @@ public class IntegerAggregator implements Aggregator {
     public IntegerAggregator(int gbfield, Type gbfieldtype, int afield, Op what) {
         // some code goes here
     	this.gbfield = gbfield;
-        this.afield = afield;
-        this.gbfieldtype = gbfieldtype;
-        this.what = what;
-        this.aggMap = new HashMap<Field, Integer>(); // value associate to field
-        this.countMap = new HashMap<Field, Integer>(); // count associate to field
+    	this.gbfieldtype = gbfieldtype;
+    	this.afield = afield;
+    	this.what = what;
+    	this.data = new HashMap<Field, ArrayList<Integer>>();
+    	if (gbfield==NO_GROUPING) td = new TupleDesc(new Type[]{Type.INT_TYPE});
+    	else td = new TupleDesc(new Type[] {gbfieldtype,Type.INT_TYPE});
     }
 
     /**
@@ -47,56 +46,37 @@ public class IntegerAggregator implements Aggregator {
      * @param tup
      *            the Tuple containing an aggregate field and a group-by field
      */
-    // base aggregate value
-    private int baseAgg(){
-    	switch(what){
-	    	case MIN: return Integer.MAX_VALUE;
-	    	case MAX: return Integer.MIN_VALUE;
-	    	case SUM: 
-	    	case COUNT: 
-	    	case AVG: 
-	    		return 0;
-	    	default: 
-	    		return 0;
-    	}
-    }
-    
     public void mergeTupleIntoGroup(Tuple tup) {
         // some code goes here
-    	Field t_gbfield;
-    	if (this.gbfield == NO_GROUPING) t_gbfield = null;
-    	else t_gbfield = tup.getField(gbfield);
-    	
-    	if (aggMap.containsKey(t_gbfield) == false)
-    	{
-    		aggMap.put(t_gbfield, baseAgg());
-    		countMap.put(t_gbfield, 0);
+    	Field f;
+    	if (gbfield == NO_GROUPING) f = null;
+    	f = tup.getField(gbfield);
+    	int value = ((IntField)tup.getField(afield)).getValue();
+    	if(data.containsKey(f)) {
+    		int c,sum,temp;
+    		temp=data.get(f).get(0);
+    		c=data.get(f).get(1);
+    		sum=data.get(f).get(2);
+    		switch(what) {
+	            case MIN:
+	                if (value < temp) data.get(f).set(0, value);
+	                break;
+	            case MAX:
+	                if (value > temp) data.get(f).set(0, value);
+	                break;
+	            case SUM:
+	            case AVG:
+	            	data.get(f).set(2, sum+value);
+	            case COUNT:
+	        		data.get(f).set(1, c+1);
+	                break;
+	            default:
+	                break;
+    		}
     	}
-    	
-        int val = ((IntField)tup.getField(afield)).getValue();
-        int prevV = aggMap.get(t_gbfield);
-        int prevC = countMap.get(t_gbfield);
-        int newVal = prevV;
-        
-    	switch(what){
-	    	case MIN: 
-	    		if (val < prevV) newVal = val;
-                break;
-	    	case MAX: 
-	    		if (val > prevV) newVal = val;
-                break;
-	    	case SUM: 
-	    	case AVG: 
-	    		// Summing up all values and track how many values are in
-	    		countMap.put(t_gbfield, prevC+1);
-	    		newVal = val+prevV;
-                break;
-	    	case COUNT: 
-	    		newVal = prevV + 1;
-	    	default: 
-	    		break;
+    	else {
+    		data.put(f,new ArrayList<Integer>(Arrays.asList(value,1,value)));
     	}
-    	aggMap.put(t_gbfield, newVal);
     }
 
     /**
@@ -109,36 +89,39 @@ public class IntegerAggregator implements Aggregator {
      */
     public DbIterator iterator() {
         // some code goes here
-    	ArrayList<Tuple> tList = new ArrayList<Tuple>();
-        TupleDesc td;
-        
-        // When not grouped, return tuple of single (aggregateVal)
-        // Else, return tuple of pair
-        if (gbfield == Aggregator.NO_GROUPING) {
-            Type[] tps = new Type[] {Type.INT_TYPE};
-            td = new TupleDesc(tps);
-        }else {
-        	Type[] tps = new Type[] {gbfieldtype,Type.INT_TYPE};
-            td = new TupleDesc(tps);
-        }
-        	
-        Tuple newT;
-        for (Field group: aggMap.keySet()){
-    		int aggVal;
-    		if (what == Op.AVG) aggVal = aggMap.get(group) / countMap.get(group);
-    		else aggVal = aggMap.get(group);
-    		
-    		newT = new Tuple(td);
-    		
-    		if (gbfield == Aggregator.NO_GROUPING){
-    			newT.setField(0, new IntField(aggVal));
-    		}else {
-        		newT.setField(0, group);
-        		newT.setField(1, new IntField(aggVal));    			
+    	Set<Field> keys = data.keySet();
+    	Iterator<Field> keyItr = keys.iterator();
+    	ArrayList<Tuple> tuplelist = new ArrayList<Tuple>();
+    	while(keyItr.hasNext()){
+    		Tuple t = new Tuple(td);
+    		Field key = (Field)keyItr.next();
+    		int value=0;
+    		switch(what) {
+	            case MIN:
+	                value=data.get(key).get(0);
+	                break;
+	            case MAX:
+	            	value=data.get(key).get(0);
+	                break;
+	            case SUM:
+	            	value=data.get(key).get(2);
+	            	break;
+	            case AVG:
+	            	value=data.get(key).get(2)/data.get(key).get(1);
+	            	break;
+	            case COUNT:
+	            	value=data.get(key).get(1);
+	                break;
     		}
-    		tList.add(newT);
+    		if(gbfield == NO_GROUPING){
+    			t.setField(0, new IntField(value));
+    		}else{
+    			t.setField(0, key);
+    			t.setField(1, new IntField(value));
+    		}
+    		tuplelist.add(t);
     	}
-    	return new TupleIterator(td, tList);
+    	return new TupleIterator(td, tuplelist);
     }
 
 }
