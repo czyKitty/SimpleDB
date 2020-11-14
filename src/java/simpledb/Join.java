@@ -8,10 +8,8 @@ import java.util.*;
 public class Join extends Operator {
 
     private static final long serialVersionUID = 1L;
-    
     private JoinPredicate p;
     private DbIterator child1,child2;
-    private Tuple curTuple;
 
     /**
      * Constructor. Accepts to children to join and the predicate to join them
@@ -27,14 +25,13 @@ public class Join extends Operator {
     public Join(JoinPredicate p, DbIterator child1, DbIterator child2) {
         // some code goes here
     	this.p = p;
-        this.child1 = child1;
-        this.child2 = child2;
-        this.curTuple = null;
+    	this.child1 = child1;
+    	this.child2 = child2;
     }
 
     public JoinPredicate getJoinPredicate() {
         // some code goes here
-        return this.p;
+        return p;
     }
 
     /**
@@ -44,7 +41,7 @@ public class Join extends Operator {
      * */
     public String getJoinField1Name() {
         // some code goes here
-        return this.child1.getTupleDesc().getFieldName(this.p.getField1());
+        return child1.getTupleDesc().getFieldName(p.getField1());
     }
 
     /**
@@ -54,7 +51,7 @@ public class Join extends Operator {
      * */
     public String getJoinField2Name() {
         // some code goes here
-    	return this.child2.getTupleDesc().getFieldName(this.p.getField2());
+        return child2.getTupleDesc().getFieldName(p.getField2());
     }
 
     /**
@@ -63,32 +60,28 @@ public class Join extends Operator {
      */
     public TupleDesc getTupleDesc() {
         // some code goes here
-    	return TupleDesc.merge(this.child1.getTupleDesc(), this.child2.getTupleDesc());
+        return TupleDesc.merge(child1.getTupleDesc(), child2.getTupleDesc());
     }
 
     public void open() throws DbException, NoSuchElementException,
             TransactionAbortedException {
         // some code goes here
-    	if (this.child1 == null || this.child2 == null) throw new NoSuchElementException("Child is null.");
-        this.child1.open();
-        this.child2.open();
-        super.open();
-        this.curTuple = null;
+    	super.open();
+    	child1.open();
+    	child2.open();
     }
 
     public void close() {
         // some code goes here
+    	child1.close();
+    	child2.close();
     	super.close();
-        this.child1.close();
-        this.child2.close();
-        this.curTuple = null;
     }
 
     public void rewind() throws DbException, TransactionAbortedException {
         // some code goes here
-    	this.child1.rewind();
-        this.child2.rewind();
-        
+    	child1.rewind();
+    	child2.rewind();
     }
 
     /**
@@ -109,41 +102,33 @@ public class Join extends Operator {
      * @return The next matching tuple.
      * @see JoinPredicate#filter
      */
-    // Helper method, join tuples
-    private Tuple joinTuple(Tuple t1, Tuple t2)
-    {
-		int t1Size = t1.getTupleDesc().numFields();
-		int t2Size = t2.getTupleDesc().numFields();
-		Tuple joinedTuple = new Tuple(this.getTupleDesc());
-		for (int i = 0; i < t1Size; i++)
-		{
-			joinedTuple.setField(i, t1.getField(i));
-		}
-		for (int i = 0; i < t2Size; i++)
-		{
-			joinedTuple.setField(t1Size + i, t2.getField(i));
-		}
-		return joinedTuple;
-    }
-    
+    private Tuple t1;
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
         // some code goes here
-        while (this.curTuple != null || this.child1.hasNext()) {
-        	Tuple leftT;
-        	if (this.curTuple != null) leftT = this.curTuple;
-        	else{
-            	this.curTuple = this.child1.next();
-            	leftT = this.curTuple;
+    	if(child1 == null || child2 == null) return null;
+    	if (t1==null) t1 = child1.next();
+        while(t1!=null) {	
+        	while(child2.hasNext()) {
+            	Tuple t2 = child2.next();
+        		if (p.filter(t1, t2)) {
+        			Tuple tuple = new Tuple(this.getTupleDesc());
+        			Iterator<Field> iterator = t1.fields();
+        			int i = 0;
+        			while(iterator.hasNext()) {
+        				tuple.setField(i, iterator.next());
+        				i++;
+        			}
+        			iterator = t2.fields();
+        			while(iterator.hasNext()) {
+        				tuple.setField(i, iterator.next());
+        				i++;
+        			}
+        			return tuple;
+        		}
         	}
-	        // Loop until find next matching tuple
-	        while (this.child2.hasNext()) {
-		        Tuple rightT = this.child2.next();
-		        if (p.filter(this.curTuple, rightT)) {
-		        	return joinTuple(leftT, rightT);
-		        }
-	        }
-	        this.curTuple = null;
-	        this.child2.rewind();
+        	if (!child1.hasNext()) return null;
+        	t1 = child1.next();
+        	child2.rewind();
         }
         return null;
     }
@@ -151,18 +136,14 @@ public class Join extends Operator {
     @Override
     public DbIterator[] getChildren() {
         // some code goes here
-    	DbIterator[] children = new DbIterator[2];
-        children[0] = this.child1;
-        children[1] = this.child2;
-        return children;
+        return new DbIterator[] {child1,child2};
     }
 
     @Override
     public void setChildren(DbIterator[] children) {
         // some code goes here
-    	this.child1 = children[0];
-    	this.child2 = children[1];
-        this.curTuple = null;
+    	child1 = children[0];
+    	child2 = children[2];
     }
 
 }
