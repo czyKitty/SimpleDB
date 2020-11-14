@@ -8,10 +8,9 @@ import java.util.*;
 public class Filter extends Operator {
 
     private static final long serialVersionUID = 1L;
-
     private Predicate p;
     private DbIterator child;
-    
+
     /**
      * Constructor accepts a predicate to apply and a child operator to read
      * tuples to filter from.
@@ -24,36 +23,35 @@ public class Filter extends Operator {
     public Filter(Predicate p, DbIterator child) {
         // some code goes here
     	this.p = p;
-        this.child = child;
+    	this.child = child;
     }
 
     public Predicate getPredicate() {
         // some code goes here
-        return this.p;
+        return p;
     }
 
     public TupleDesc getTupleDesc() {
         // some code goes here
-        return this.child.getTupleDesc();
+        return child.getTupleDesc();
     }
 
     public void open() throws DbException, NoSuchElementException,
             TransactionAbortedException {
         // some code goes here
-    	if (this.child == null) throw new NoSuchElementException("Child is null.");
-    	this.child.open();
-        super.open();
+    	super.open();
+    	child.open();
     }
 
     public void close() {
         // some code goes here
+    	child.close();
     	super.close();
-    	this.child.close();
     }
 
     public void rewind() throws DbException, TransactionAbortedException {
         // some code goes here
-    	this.child.rewind();
+    	child.rewind();
     }
 
     /**
@@ -68,30 +66,23 @@ public class Filter extends Operator {
     protected Tuple fetchNext() throws NoSuchElementException,
             TransactionAbortedException, DbException {
         // some code goes here
-    	if (this.child == null) {
-    		return null;
+    	while(child.hasNext()) {
+    		Tuple t = child.next();
+    		if (p.filter(t)) return t;
     	}
-        while (this.child.hasNext()) {
-        	Tuple t = this.child.next();
-            if (this.p.filter(t)) {
-            	return t;
-            }
-        }
-        return null;
+    	return null;
     }
 
     @Override
     public DbIterator[] getChildren() {
         // some code goes here
-    	DbIterator[] children = new DbIterator[1];
-        children[0] = this.child;
-        return children;
+        return new DbIterator[]{child};
     }
 
     @Override
     public void setChildren(DbIterator[] children) {
         // some code goes here
-    	this.child = children[0];
+    	child = children[0];
     }
 
 }
