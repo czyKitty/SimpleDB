@@ -1,7 +1,7 @@
 package simpledb;
-import java.util.*;
 
 import simpledb.Aggregator.Op;
+import java.util.*;
 
 /**
  * Knows how to compute some aggregate over a set of StringFields.
@@ -9,12 +9,12 @@ import simpledb.Aggregator.Op;
 public class StringAggregator implements Aggregator {
 
     private static final long serialVersionUID = 1L;
-
-    private int gbfield, afield;
-    private Type gbfieldtype;
+    private int gbfield,afield;
     private Op what;
+    private Type gbfieldtype;
+    private TupleDesc td;
+    private HashMap<Field,Integer> count;
 
-    private HashMap<Field,Integer> countMap;
     /**
      * Aggregate constructor
      * @param gbfield the 0-based index of the group-by field in the tuple, or NO_GROUPING if there is no grouping
@@ -26,11 +26,14 @@ public class StringAggregator implements Aggregator {
 
     public StringAggregator(int gbfield, Type gbfieldtype, int afield, Op what) {
         // some code goes here
-    	this.gbfield = gbfield;
-        this.afield = afield;
-        this.gbfieldtype = gbfieldtype;
-        this.what = what;
-        this.countMap = new HashMap<Field, Integer>();
+    	this.gbfield=gbfield;
+    	this.gbfieldtype=gbfieldtype;
+    	this.afield=afield;
+    	this.what=what;
+    	this.count = new HashMap<Field, Integer>();
+    	if (what!= Aggregator.Op.COUNT) throw new IllegalArgumentException();
+    	if (gbfield==NO_GROUPING) td = new TupleDesc(new Type[]{Type.INT_TYPE});
+    	else td = new TupleDesc(new Type[] {gbfieldtype,Type.INT_TYPE});
     }
 
     /**
@@ -39,14 +42,15 @@ public class StringAggregator implements Aggregator {
      */
     public void mergeTupleIntoGroup(Tuple tup) {
         // some code goes here
-    	Field t_gbfield;
-    	if (gbfield == Aggregator.NO_GROUPING) t_gbfield = null;
-    	else t_gbfield = tup.getField(gbfield);
-    	
-    	if (countMap.containsKey(t_gbfield) == false) countMap.put(t_gbfield, 0);
-
-    	int prevC = countMap.get(t_gbfield);
-    	countMap.put(t_gbfield, prevC+1);
+    	Field f;
+    	if (gbfield == NO_GROUPING) f = null;
+    	f = tup.getField(gbfield);
+    	int c = 1;
+    	if(count.containsKey(f)) {
+	        c=count.get(f);
+	        c++;
+    	}
+    	count.put(f, c);
     }
 
     /**
@@ -59,29 +63,21 @@ public class StringAggregator implements Aggregator {
      */
     public DbIterator iterator() {
         // some code goes here
-    	ArrayList<Tuple> tList = new ArrayList<Tuple>();
-        TupleDesc td;
-        
-        // if not grouping, single type tuple
-        if (gbfield == Aggregator.NO_GROUPING) {
-            Type[] tps = new Type[] {Type.INT_TYPE};
-            td = new TupleDesc(tps);
-        }else {
-        	Type[] tps = new Type[] {gbfieldtype, Type.INT_TYPE};
-            td = new TupleDesc(tps);
-        }
-        
-        Tuple newT;
-        for (Field group : countMap.keySet()){
-    		int aggVal = countMap.get(group);
-    		newT = new Tuple(td);  
-    		if (gbfield == Aggregator.NO_GROUPING) newT.setField(0, new IntField(aggVal));
-    		else {
-    			newT.setField(0, group);
-        		newT.setField(1, new IntField(aggVal));    			
+    	Set<Field> keys = count.keySet();
+    	Iterator<Field> keyItr = keys.iterator();
+    	ArrayList<Tuple> tuplelist = new ArrayList<Tuple>();
+    	while(keyItr.hasNext()){
+    		Tuple t = new Tuple(td);
+    		Field key = (Field)keyItr.next();
+    		if(gbfield == NO_GROUPING){
+    			t.setField(0, new IntField(count.get(key)));
+    		}else{
+    			t.setField(0, key);
+    			t.setField(1, new IntField(count.get(key)));
     		}
-    		tList.add(newT);
+    		tuplelist.add(t);
     	}
-    	return new TupleIterator(td, tList);
+    	return new TupleIterator(td, tuplelist);
     }
+
 }
