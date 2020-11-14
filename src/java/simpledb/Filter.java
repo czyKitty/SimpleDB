@@ -1,65 +1,88 @@
 package simpledb;
 
-import java.io.Serializable;
+import java.util.*;
 
 /**
- * JoinPredicate compares fields of two tuples using a predicate. JoinPredicate
- * is most likely used by the Join operator.
+ * Filter is an operator that implements a relational select.
  */
-public class JoinPredicate implements Serializable {
+public class Filter extends Operator {
 
     private static final long serialVersionUID = 1L;
-    private Predicate.Op op;
-    private int f1,f2;
+    private Predicate p;
+    private DbIterator child;
 
     /**
-     * Constructor -- create a new predicate over two fields of two tuples.
+     * Constructor accepts a predicate to apply and a child operator to read
+     * tuples to filter from.
      * 
-     * @param field1
-     *            The field index into the first tuple in the predicate
-     * @param field2
-     *            The field index into the second tuple in the predicate
-     * @param op
-     *            The operation to apply (as defined in Predicate.Op); either
-     *            Predicate.Op.GREATER_THAN, Predicate.Op.LESS_THAN,
-     *            Predicate.Op.EQUAL, Predicate.Op.GREATER_THAN_OR_EQ, or
-     *            Predicate.Op.LESS_THAN_OR_EQ
-     * @see Predicate
+     * @param p
+     *            The predicate to filter tuples with
+     * @param child
+     *            The child operator
      */
-    public JoinPredicate(int field1, Predicate.Op op, int field2) {
+    public Filter(Predicate p, DbIterator child) {
         // some code goes here
-    	this.f1 = field1;
-    	this.f2 = field2;
-    	this.op = op;
+    	this.p = p;
+    	this.child = child;
+    }
+
+    public Predicate getPredicate() {
+        // some code goes here
+        return p;
+    }
+
+    public TupleDesc getTupleDesc() {
+        // some code goes here
+        return child.getTupleDesc();
+    }
+
+    public void open() throws DbException, NoSuchElementException,
+            TransactionAbortedException {
+        // some code goes here
+    	super.open();
+    	child.open();
+    }
+
+    public void close() {
+        // some code goes here
+    	child.close();
+    	super.close();
+    }
+
+    public void rewind() throws DbException, TransactionAbortedException {
+        // some code goes here
+    	child.rewind();
     }
 
     /**
-     * Apply the predicate to the two specified tuples. The comparison can be
-     * made through Field's compare method.
+     * AbstractDbIterator.readNext implementation. Iterates over tuples from the
+     * child operator, applying the predicate to them and returning those that
+     * pass the predicate (i.e. for which the Predicate.filter() returns true.)
      * 
-     * @return true if the tuples satisfy the predicate.
+     * @return The next tuple that passes the filter, or null if there are no
+     *         more tuples
+     * @see Predicate#filter
      */
-    public boolean filter(Tuple t1, Tuple t2) {
+    protected Tuple fetchNext() throws NoSuchElementException,
+            TransactionAbortedException, DbException {
         // some code goes here
-    	return t1.getField(f1).compare(this.op, t2.getField(f2));
-        
+    	while(child.hasNext()) {
+    		Tuple t = child.next();
+    		if (p.filter(t)) return t;
+    	}
+    	return null;
     }
-    
-    public int getField1()
-    {
+
+    @Override
+    public DbIterator[] getChildren() {
         // some code goes here
-        return this.f1;
+        return new DbIterator[]{child};
     }
-    
-    public int getField2()
-    {
+
+    @Override
+    public void setChildren(DbIterator[] children) {
         // some code goes here
-        return this.f2;
+    	child = children[0];
     }
-    
-    public Predicate.Op getOperator()
-    {
-        // some code goes here
-        return this.op;
-    }
+
 }
