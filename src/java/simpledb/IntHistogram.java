@@ -20,8 +20,19 @@ public class IntHistogram {
      * @param min The minimum integer value that will ever be passed to this class for histogramming
      * @param max The maximum integer value that will ever be passed to this class for histogramming
      */
+	private int[] buckets;
+    private int numBuckets;
+    private int mod;
+    private int totalValues;
+    private int minValue;
+    
     public IntHistogram(int buckets, int min, int max) {
     	// some code goes here
+    	this.buckets = new int[buckets];
+    	this.numBuckets = buckets;
+        this.mod = (int) Math.ceil((double) (max - min + 1)/buckets);
+        this.totalValues = 0;
+        this.minValue = min;
     }
 
     /**
@@ -30,6 +41,9 @@ public class IntHistogram {
      */
     public void addValue(int v) {
     	// some code goes here
+    	int bucket = (v - this.minValue)/this.mod;
+        this.buckets[bucket]++;
+        this.totalValues++;
     }
 
     /**
@@ -43,11 +57,98 @@ public class IntHistogram {
      * @return Predicted selectivity of this particular operator and value
      */
     public double estimateSelectivity(Predicate.Op op, int v) {
-
     	// some code goes here
-        return -1.0;
+    	switch(op) {
+        case EQUALS:
+        case LIKE:
+            return estimateSelectivityEquals(v);
+        case GREATER_THAN:
+        case LESS_THAN:
+            return estimateSelectivityInequality(op,v);
+        case LESS_THAN_OR_EQ:
+            return (estimateSelectivityEquals(v) + estimateSelectivityInequality(Predicate.Op.LESS_THAN,v));
+        case GREATER_THAN_OR_EQ:
+            return (estimateSelectivityEquals(v) + estimateSelectivityInequality(Predicate.Op.GREATER_THAN,v));
+        case NOT_EQUALS:
+            return 1.0 - estimateSelectivityEquals(v);
+        default:
+            return -1.0; 
+    	}
     }
     
+    private double estimateSelectivityEquals(int v) {
+        int bucket = findBucket(v);
+        if (bucket < 0)
+        	return 0.0;
+        if (bucket >= this.numBuckets)
+        	return 0.0;
+        int height = this.buckets[bucket];
+        return (double) ((double) height/this.mod)/this.totalValues;
+    }
+    
+    private double estimateSelectivityInequality(Predicate.Op op, int v) {
+        int bucket = findBucket(v);
+        int bucket_f, b_right, b_left, height;
+        
+        // v is less than the min value
+        // so greater than should return everything (1.0)
+        // and less than should return 0.0
+        if (bucket < 0){
+        	b_right = 0;
+        	b_left = -1;
+            bucket_f = 0;
+            height = 0;
+        }else if (bucket >= this.numBuckets){
+        	b_right = this.numBuckets;
+        	b_left = this.numBuckets-1; 
+            bucket_f = 0;
+            height = 0;
+        }else{
+        	b_right = bucket+1;
+        	b_left = bucket-1;
+            bucket_f = -1;
+            height = this.buckets[bucket];
+        }
+        double selectivity = 0.0;
+        switch(op) {
+            case GREATER_THAN:
+                if (bucket_f == -1) {
+                    bucket_f = ((b_right*this.mod)+this.minValue-v)/this.mod;
+                }
+                selectivity = (height * bucket_f) / this.totalValues;
+            	if (b_right >= this.numBuckets)
+            		return selectivity/this.totalValues;
+            	for (int i = b_right; i < this.numBuckets; i++)
+            	{
+            		selectivity += this.buckets[i];
+            	}
+            	return selectivity/this.totalValues;
+            case LESS_THAN:
+                if (bucket_f == -1) {
+                    bucket_f = (v-(b_left*this.mod)+this.minValue)/this.mod;
+                }
+                selectivity = (height * bucket_f) / this.totalValues;
+            	if (b_left < 0)
+            		return selectivity/this.totalValues;
+            	for (int i = b_left; i >= 0; i--)
+            	{
+            		selectivity += this.buckets[i];
+            	}
+            	return selectivity/this.totalValues;
+            default:
+                return -1.0;
+        }
+    }
+    
+    private int findBucket(int v)
+    {
+        int bucket = (v - this.minValue)/this.mod;
+        if (bucket < 0)
+        	bucket = -1;
+        if (bucket >= this.numBuckets)
+        	bucket = this.numBuckets;
+        return bucket;
+    }
     /**
      * @return
      *     the average selectivity of this histogram.
@@ -67,6 +168,16 @@ public class IntHistogram {
      */
     public String toString() {
         // some code goes here
-        return null;
+    	String s = "";
+    	for (int i = 0; i < this.numBuckets; i++)
+    	{
+    		s += "bucket " + i + ": ";
+    		for (int j = 0; j < this.buckets[i]; j++)
+    		{
+    			s += "|";
+    		}
+    		s += "\n";
+    	}
+        return s;
     }
 }
