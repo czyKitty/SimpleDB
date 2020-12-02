@@ -231,7 +231,32 @@ public class JoinOptimizer {
 
         // some code goes here
         //Replace the following
-        return joins;
+    	PlanCache cache = new PlanCache();
+        Set<LogicalJoinNode> hash = new HashSet<LogicalJoinNode>(joins);
+        Set<Set<LogicalJoinNode>> join = enumerateSubsets(joins,1);
+        // Literally going through each JoinNode and computing the Cost and Card of Subplan through nested loops
+        for (int i = 0;i <= join.size();++i){
+            for (Set<LogicalJoinNode> set : enumerateSubsets(joins,i)) {
+                CostCard best = new CostCard();
+                best.plan = null;
+                best.cost = Double.MAX_VALUE;
+                best.card = Integer.MAX_VALUE;
+                for (LogicalJoinNode s : set) {
+                    CostCard plan = computeCostAndCardOfSubplan(stats, filterSelectivities,s,set,best.cost,cache);
+                    if (plan!= null && plan.cost < best.cost) {
+                        best = plan;
+                    }
+                }
+                cache.addPlan(set,best.cost,best.card,best.plan);
+            }
+        }
+        Vector<LogicalJoinNode> best = cache.getOrder(hash);
+
+        // Display joins for IMDB test if explain flag is on
+        if (explain) {
+            printJoins(best,cache,stats,filterSelectivities);
+        }
+        return best;
     }
 
     // ===================== Private Methods =================================
